@@ -48,8 +48,9 @@ def select_program(payload):
     if not applicants:
         # Create applicant record tied to this user with the selected program
         applicant_id = Database.execute_update(
-            'INSERT INTO applicants (user_id, program_id) VALUES (%s, %s)',
-            (user_id, program_id)
+            'INSERT INTO applicants (user_id, program_id) VALUES (%s, %s) RETURNING id',
+            (user_id, program_id),
+            return_id=True
         )
         if not applicant_id:
             return jsonify({'message': 'Failed to create applicant record'}), 500

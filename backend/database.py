@@ -55,7 +55,10 @@ class Database:
             with Database.get_cursor() as cursor:
                 cursor.execute(query, params or ())
                 if return_id:
-                    return cursor.fetchone()["id"]
+                    result = cursor.fetchone()
+                    if result:
+                        return result.get("id") or result[0]
+                    return None
                 return True
         except psycopg2.Error as e:
             print(f"Update execution error: {e}")
