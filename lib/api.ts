@@ -72,6 +72,7 @@ export interface PaymentTransaction {
 export interface PaymentResponse {
   message: string;
   transaction_id: string;
+  transaction_db_id: number;
   applicant_id: number;
   payment_type: string;
   amount: number;
