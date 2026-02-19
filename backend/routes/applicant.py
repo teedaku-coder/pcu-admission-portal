@@ -262,10 +262,11 @@ def upload_document(payload):
     doc_id = Database.execute_update(
     '''INSERT INTO documents 
        (application_form_id, document_type, original_filename, stored_filename, file_path, 
-        file_size, compressed_size, mime_type, is_compressed)
+        file_size, compressed_size, mime_type, is_compressed) RETURNING id
        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
     (form_id_int, document_type, file.filename, stored_filename, file_path,
-     original_size_int, compressed_size_int, mime_type, is_compressed_bool)
+     original_size_int, compressed_size_int, mime_type, is_compressed_bool),
+    return_id=True
 )
     
     if not doc_id:
@@ -605,8 +606,9 @@ def process_payment(payload):
         transaction_db_id = Database.execute_update(
             '''INSERT INTO payment_transactions 
                (applicant_id, payment_type, amount, status, payment_method, reference_id, completed_at)
-               VALUES (%s, %s, %s, %s, %s, %s, NOW())''',
-            (applicant_id, payment_type, amount, 'completed', payment_method, reference_id)
+               VALUES (%s, %s, %s, %s, %s, %s, NOW()) RETURNING id''',
+            (applicant_id, payment_type, amount, 'completed', payment_method, reference_id),
+            return_id=True
         )
         
         if not transaction_db_id:
