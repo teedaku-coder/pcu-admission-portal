@@ -32,6 +32,7 @@ interface PaymentModal {
   type: "acceptance" | "tuition" | null;
   step: "select" | "confirm" | "processing" | "success";
   transactionId?: string;
+  transactionDbId?: number;
 }
 
 export default function PaymentPage() {
@@ -135,18 +136,19 @@ export default function PaymentPage() {
   };
 
   const downloadReceipt = async () => {
-    if (!paymentModal.transactionId) return;
+    if (!paymentModal.transactionDbId) {
+      alert("Transaction ID not available. Please try again.");
+      return;
+    }
 
     try {
-      // Extract numeric transaction ID from the response
-      const transId = parseInt(paymentModal.transactionId.split("-")[1] || "0");
-      const blob = await ApiClient.downloadPaymentReceipt(transId);
+      const blob = await ApiClient.downloadPaymentReceipt(paymentModal.transactionDbId);
 
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `payment_receipt_${paymentModal.transactionId}.pdf`;
+      link.download = `payment_receipt_${paymentModal.transactionId || "receipt"}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -198,6 +200,7 @@ export default function PaymentPage() {
         ...prev,
         step: "success",
         transactionId: result.transaction_id,
+        transactionDbId: result.transaction_db_id,
       }));
 
       // Close modal after 2 seconds and reload data

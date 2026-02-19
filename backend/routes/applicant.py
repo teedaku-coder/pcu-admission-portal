@@ -601,14 +601,14 @@ def process_payment(payload):
     
     # Create payment transaction record
     try:
-        success = Database.execute_update(
+        transaction_db_id = Database.execute_update(
             '''INSERT INTO payment_transactions 
                (applicant_id, payment_type, amount, status, payment_method, reference_id, completed_at)
                VALUES (%s, %s, %s, %s, %s, %s, NOW())''',
             (applicant_id, payment_type, amount, 'completed', payment_method, reference_id)
         )
         
-        if not success:
+        if not transaction_db_id:
             return jsonify({'message': 'Failed to save payment transaction'}), 500
         
         # Update applicant payment status flags
@@ -623,12 +623,13 @@ def process_payment(payload):
                 (applicant_id,)
             )
         
-        # Prepare receipt data
+        # Prepare receipt data - return the actual database ID
         transaction_id = reference_id or f"PAY-{uuid.uuid4().hex[:12].upper()}"
         
         return jsonify({
             'message': 'Payment processed successfully',
             'transaction_id': transaction_id,
+            'transaction_db_id': transaction_db_id,
             'applicant_id': applicant_id,
             'payment_type': payment_type,
             'amount': amount,
@@ -744,3 +745,54 @@ def get_payment_history(payload):
         'payment_history': formatted_transactions,
         'total_payments': len(formatted_transactions)
     }), 200
+
+@applicant_bp.route('/download-document/<int:document_id>', methods=['GET'])
+@AuthHandler.token_required
+def download_document(payload, document_id):
+    """Download an uploaded document"""
+    user_id = payload['user_id']
+    
+    # Get applicant
+    applicant = Database.execute_query(
+        'SELECT id FROM applicants WHERE user_id = %s',
+        (user_id,)
+    )
+    
+    if not applicant:
+        return jsonify({'message': 'Applicant not found'}), 404
+    
+    applicant_id = applicant[0]['id']
+    
+    # Get document and verify ownership
+    document = Database.execute_query(
+        '''SELECT d.file_path, d.original_filename, d.mime_type
+           FROM documents d
+           JOIN application_forms af ON d.application_form_id = af.id
+           WHERE d.id = %s AND af.applicant_id = %s''',
+        (document_id, applicant_id)
+    )
+    
+    if not document:
+        return jsonify({'message': 'Document not found'}), 404
+    
+    doc_data = document[0]
+    file_path = doc_data['file_path']
+    original_filename = doc_data['original_filename']
+    mime_type = doc_data['mime_type'] or 'application/octet-stream'
+    
+    # Verify file exists
+    if not os.path.exists(file_path):
+        return jsonify({'message': 'Document file not found on server'}), 404
+    
+    try:
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+        
+        return Response(
+            file_data,
+            mimetype=mime_type,
+            headers={'Content-Disposition': f'attachment;filename={original_filename}'}
+        )
+    except Exception as e:
+        print(f"Error downloading document: {e}")
+        return jsonify({'message': 'Error downloading document'}), 500
