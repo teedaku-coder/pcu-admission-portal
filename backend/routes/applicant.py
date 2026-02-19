@@ -262,8 +262,8 @@ def upload_document(payload):
     doc_id = Database.execute_update(
     '''INSERT INTO documents 
        (application_form_id, document_type, original_filename, stored_filename, file_path, 
-        file_size, compressed_size, mime_type, is_compressed) RETURNING id
-       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+        file_size, compressed_size, mime_type, is_compressed)
+       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
     (form_id_int, document_type, file.filename, stored_filename, file_path,
      original_size_int, compressed_size_int, mime_type, is_compressed_bool),
     return_id=True
