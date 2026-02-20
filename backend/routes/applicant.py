@@ -744,3 +744,128 @@ def get_payment_history(payload):
         'payment_history': formatted_transactions,
         'total_payments': len(formatted_transactions)
     }), 200
+
+@applicant_bp.route('/get-recommendations', methods=['GET'])
+@AuthHandler.token_required
+def get_recommendations(payload):
+    """Get recommended courses for the applicant"""
+    user_id = payload['user_id']
+    
+    # Get applicant
+    applicant = Database.execute_query(
+        'SELECT id FROM applicants WHERE user_id = %s',
+        (user_id,)
+    )
+    
+    if not applicant:
+        return jsonify({'message': 'Applicant record not found'}), 404
+    
+    applicant_id = applicant[0]['id']
+    
+    # Get all reviews with recommendations for this applicant
+    recommendations = Database.execute_query(
+        '''SELECT ar.id, ar.review_notes, ar.recommended_program_id, p.name as program_name,
+                  ar.reviewed_at, ar.reviewed_by, u.name as reviewed_by_name,
+                  a.recommended_course_response, a.accepted_recommended_program_id
+           FROM application_reviews ar
+           LEFT JOIN programs p ON ar.recommended_program_id = p.id
+           LEFT JOIN users u ON ar.reviewed_by = u.id
+           LEFT JOIN applicants a ON a.id = %s
+           WHERE ar.applicant_id = %s AND ar.recommendation = %s''',
+        (applicant_id, applicant_id, 'recommend_other_program')
+    )
+    
+    # Format recommendations
+    formatted_recommendations = []
+    for rec in (recommendations or []):
+        formatted_recommendations.append({
+            'review_id': rec['id'],
+            'program_id': rec['recommended_program_id'],
+            'program_name': rec['program_name'],
+            'review_notes': rec['review_notes'],
+            'reviewed_by': rec['reviewed_by_name'],
+            'reviewed_at': rec['reviewed_at'].isoformat() if rec['reviewed_at'] else None,
+            'response': rec['recommended_course_response'],
+            'is_accepted': rec['accepted_recommended_program_id'] == rec['recommended_program_id'] if rec['accepted_recommended_program_id'] else None
+        })
+    
+    return jsonify({
+        'recommendations': formatted_recommendations,
+        'total_recommendations': len(formatted_recommendations)
+    }), 200
+
+@applicant_bp.route('/respond-to-recommendation', methods=['POST'])
+@AuthHandler.token_required
+def respond_to_recommendation(payload):
+    """Accept or decline a recommended course"""
+    user_id = payload['user_id']
+    data = request.get_json()
+    
+    if not data or 'review_id' not in data or 'response' not in data:
+        return jsonify({'message': 'review_id and response are required'}), 400
+    
+    review_id = data['review_id']
+    response = data['response']  # 'accepted' or 'declined'
+    
+    if response not in ['accepted', 'declined']:
+        return jsonify({'message': 'response must be either "accepted" or "declined"'}), 400
+    
+    # Verify ownership and get review details
+    applicant = Database.execute_query(
+        'SELECT id FROM applicants WHERE user_id = %s',
+        (user_id,)
+    )
+    
+    if not applicant:
+        return jsonify({'message': 'Applicant record not found'}), 404
+    
+    applicant_id = applicant[0]['id']
+    
+    # Get the review to verify it exists and get program details
+    review = Database.execute_query(
+        '''SELECT ar.id, ar.applicant_id, ar.recommended_program_id
+           FROM application_reviews ar
+           WHERE ar.id = %s AND ar.applicant_id = %s''',
+        (review_id, applicant_id)
+    )
+    
+    if not review:
+        return jsonify({'message': 'Review not found'}), 404
+    
+    recommended_program_id = review[0]['recommended_program_id']
+    
+    try:
+        # Update applicant with response
+        if response == 'accepted':
+            success = Database.execute_update(
+                '''UPDATE applicants 
+                   SET recommended_course_response = %s, accepted_recommended_program_id = %s
+                   WHERE id = %s''',
+                (response, recommended_program_id, applicant_id)
+            )
+            # Update program to the recommended one if accepted
+            if success:
+                Database.execute_update(
+                    'UPDATE applicants SET program_id = %s WHERE id = %s',
+                    (recommended_program_id, applicant_id)
+                )
+        else:  # declined
+            success = Database.execute_update(
+                '''UPDATE applicants 
+                   SET recommended_course_response = %s
+                   WHERE id = %s''',
+                (response, applicant_id)
+            )
+        
+        if not success:
+            return jsonify({'message': 'Failed to save response'}), 500
+        
+        return jsonify({
+            'message': f'Recommendation {response} successfully',
+            'applicant_id': applicant_id,
+            'response': response
+        }), 200
+    
+    except Exception as e:
+        print(f"Error processing recommendation response: {e}")
+        return jsonify({'message': 'Error processing response'}), 500

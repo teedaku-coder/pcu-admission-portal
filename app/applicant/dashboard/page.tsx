@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { useProgramGuard } from "@/hooks/useProgramGuard";
 import FsmsAdmissionLetter from "@/components/FsmsAdmissionLetter";
+import RecommendationCard from "@/components/RecommendationCard";
+import { Recommendation } from "@/lib/api";
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -50,6 +52,9 @@ export default function ApplicantDashboard() {
     useState<AdmissionLetterData | null>(null);
   const [showLetter, setShowLetter] = useState(false);
   const [printLoading, setPrintLoading] = useState(false);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
   useProgramGuard();
 
   const handlePrintPDF = async () => {
@@ -78,6 +83,38 @@ export default function ApplicantDashboard() {
     }
   };
 
+  const loadRecommendations = async () => {
+    if (!isAuthenticated) return;
+    try {
+      setLoadingRecommendations(true);
+      const response = await ApiClient.getRecommendations();
+      setRecommendations(response.recommendations || []);
+      setRecommendationError(null);
+    } catch (err) {
+      console.error("Error loading recommendations:", err);
+      setRecommendationError("Failed to load recommendations");
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  };
+
+  const handleRespondToRecommendation = async (
+    review_id: number,
+    response: "accepted" | "declined"
+  ) => {
+    try {
+      await ApiClient.respondToRecommendation(review_id, response);
+      // Reload recommendations to update the UI
+      await loadRecommendations();
+      // Also refresh status in case program changed
+      const updatedStatus = await ApiClient.getApplicantStatus();
+      setStatus(updatedStatus.applicant);
+    } catch (err) {
+      console.error("Error responding to recommendation:", err);
+      throw err;
+    }
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -103,6 +140,7 @@ export default function ApplicantDashboard() {
     };
 
     loadStatus();
+    loadRecommendations();
   }, [isAuthenticated]);
 
   const handleLogout = async () => {
@@ -216,6 +254,31 @@ export default function ApplicantDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Recommendations Section */}
+        {recommendations.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-xl font-bold mb-4">Course Recommendations</h2>
+            <div className="space-y-4">
+              {recommendations.map((rec) => (
+                <RecommendationCard
+                  key={rec.review_id}
+                  recommendation={rec}
+                  onRespond={handleRespondToRecommendation}
+                  loading={loadingRecommendations}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {recommendationError && (
+          <Card className="mb-8 border-red-200 bg-red-50">
+            <CardContent className="py-4">
+              <p className="text-sm text-red-800">{recommendationError}</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Application Steps */}
         <Card className="mb-8">

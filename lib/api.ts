@@ -17,6 +17,8 @@ export interface ApplicantStatus {
   has_paid_acceptance_fee: boolean;
   has_paid_tuition: boolean;
   submitted_at: string | null;
+  recommended_course_response?: string | null;
+  accepted_recommended_program_id?: number | null;
 }
 
 export interface Application {
@@ -77,6 +79,22 @@ export interface PaymentResponse {
   amount: number;
   status: string;
   completed_at: string;
+}
+
+export interface Recommendation {
+  review_id: number;
+  program_id: number;
+  program_name: string;
+  review_notes: string;
+  reviewed_by: string;
+  reviewed_at: string | null;
+  response: string | null;
+  is_accepted: boolean | null;
+}
+
+export interface RecommendationResponse {
+  recommendations: Recommendation[];
+  total_recommendations: number;
 }
 
 export class ApiClient {
@@ -462,6 +480,25 @@ export class ApiClient {
 
   static async getLetterTemplate(template_id: number) {
     const { data } = await this.fetch(`/admin/letter-template/${template_id}`);
+    return data;
+  }
+
+  // Recommendation endpoints
+  static async getRecommendations(): Promise<RecommendationResponse> {
+    const { data } = await this.fetch<RecommendationResponse>(
+      "/applicant/get-recommendations"
+    );
+    return data;
+  }
+
+  static async respondToRecommendation(
+    review_id: number,
+    response: "accepted" | "declined"
+  ) {
+    const { data } = await this.fetch("/applicant/respond-to-recommendation", {
+      method: "POST",
+      body: JSON.stringify({ review_id, response }),
+    });
     return data;
   }
 }
