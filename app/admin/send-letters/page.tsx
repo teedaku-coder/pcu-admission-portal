@@ -32,8 +32,14 @@ export default function SendLettersPage() {
   const { user, isAuthenticated, logout } = useAuth();
 
   const [applications, setApplications] = useState<Application[]>([]);
+  const [pendingLetterApplications, setPendingLetterApplications] = useState<
+    Application[]
+  >([]);
   const [selectedApplicants, setSelectedApplicants] = useState<Set<number>>(
     new Set(),
+  );
+  const [activeTab, setActiveTab] = useState<"accepted" | "pending_letters">(
+    "pending_letters",
   );
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -57,8 +63,12 @@ export default function SendLettersPage() {
 
   const loadApplications = async () => {
     try {
-      const response = await ApiClient.getApplications("accepted");
-      setApplications(response.applications || []);
+      const [acceptedResponse, pendingLettersResponse] = await Promise.all([
+        ApiClient.getApplications("accepted"),
+        ApiClient.getApplications("pending_letters"),
+      ]);
+      setApplications(acceptedResponse.applications || []);
+      setPendingLetterApplications(pendingLettersResponse.applications || []);
     } catch (err) {
       setError("Failed to load applications. Please try again.");
       console.error(err);
@@ -81,8 +91,10 @@ export default function SendLettersPage() {
   };
 
   const handleSelectAll = (checked: boolean) => {
+    const activeList =
+      activeTab === "pending_letters" ? pendingLetterApplications : applications;
     if (checked) {
-      setSelectedApplicants(new Set(applications.map((app) => app.id)));
+      setSelectedApplicants(new Set(activeList.map((app) => app.id)));
     } else {
       setSelectedApplicants(new Set());
     }
@@ -344,27 +356,78 @@ export default function SendLettersPage() {
           {/* Applicants List */}
           <Card className="lg:col-span-2">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Accepted Applicants</CardTitle>
-                  <CardDescription>
-                    Select applicants to send letters to
-                  </CardDescription>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>
+                      {activeTab === "pending_letters"
+                        ? "Pending Letters"
+                        : "Accepted Applicants"}
+                    </CardTitle>
+                    <CardDescription>
+                      {activeTab === "pending_letters"
+                        ? "Accepted applicants awaiting admission letters"
+                        : "All accepted applicants"}
+                    </CardDescription>
+                  </div>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={(e) =>
-                    handleSelectAll(
-                      selectedApplicants.size !== applications.length,
-                    )
-                  }
-                  disabled={sending}
-                >
-                  {selectedApplicants.size === applications.length
-                    ? "Deselect All"
-                    : "Select All"}
-                </Button>
+
+                {/* Tabs */}
+                <div className="flex gap-2 border-b border-border">
+                  <button
+                    onClick={() => {
+                      setActiveTab("pending_letters");
+                      setSelectedApplicants(new Set());
+                    }}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === "pending_letters"
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Pending Letters (
+                    {pendingLetterApplications.length})
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab("accepted");
+                      setSelectedApplicants(new Set());
+                    }}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === "accepted"
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    All Accepted ({applications.length})
+                  </button>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      const activeList =
+                        activeTab === "pending_letters"
+                          ? pendingLetterApplications
+                          : applications;
+                      handleSelectAll(
+                        selectedApplicants.size !== activeList.length,
+                      );
+                    }}
+                    disabled={sending}
+                  >
+                    {activeTab === "pending_letters"
+                      ? selectedApplicants.size ===
+                        pendingLetterApplications.length
+                        ? "Deselect All"
+                        : "Select All"
+                      : selectedApplicants.size === applications.length
+                        ? "Deselect All"
+                        : "Select All"}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -373,16 +436,23 @@ export default function SendLettersPage() {
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
                   <p className="text-muted-foreground">Loading applicants...</p>
                 </div>
-              ) : applications.length === 0 ? (
+              ) : (activeTab === "pending_letters"
+                  ? pendingLetterApplications.length === 0
+                  : applications.length === 0) ? (
                 <div className="text-center py-12">
                   <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">
-                    No accepted applications found
+                    {activeTab === "pending_letters"
+                      ? "No applicants awaiting letters"
+                      : "No accepted applications found"}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {applications.map((app) => (
+                  {(activeTab === "pending_letters"
+                    ? pendingLetterApplications
+                    : applications
+                  ).map((app) => (
                     <div
                       key={app.id}
                       className="flex items-center gap-3 p-3 border border-border rounded-lg hover:bg-accent"

@@ -16,21 +16,39 @@ def get_applications(payload):
     status = request.args.get('status', 'submitted')
     program_id = request.args.get('program_id')
     
-    query = '''SELECT a.id, a.user_id, u.name, u.email, u.phone_number, 
-                      a.program_id, p.name as program_name, a.application_status,
-                      a.admission_status, a.submitted_at
-               FROM applicants a
-               JOIN users u ON a.user_id = u.id
-               LEFT JOIN programs p ON a.program_id = p.id
-               WHERE a.application_status = %s'''
-    
-    params = [status]
-    
-    if program_id:
-        query += ' AND a.program_id = %s'
-        params.append(program_id)
-    
-    query += ' ORDER BY a.submitted_at DESC'
+    # Handle special 'pending_letters' status for accepted applicants without letters
+    if status == 'pending_letters':
+        query = '''SELECT a.id, a.user_id, u.name, u.email, u.phone_number, 
+                          a.program_id, p.name as program_name, a.application_status,
+                          a.admission_status, a.submitted_at
+                   FROM applicants a
+                   JOIN users u ON a.user_id = u.id
+                   LEFT JOIN programs p ON a.program_id = p.id
+                   WHERE a.application_status = %s AND a.admission_status = %s'''
+        
+        params = ['accepted', 'not_admitted']
+        
+        if program_id:
+            query += ' AND a.program_id = %s'
+            params.append(program_id)
+        
+        query += ' ORDER BY a.submitted_at DESC'
+    else:
+        query = '''SELECT a.id, a.user_id, u.name, u.email, u.phone_number, 
+                          a.program_id, p.name as program_name, a.application_status,
+                          a.admission_status, a.submitted_at
+                   FROM applicants a
+                   JOIN users u ON a.user_id = u.id
+                   LEFT JOIN programs p ON a.program_id = p.id
+                   WHERE a.application_status = %s'''
+        
+        params = [status]
+        
+        if program_id:
+            query += ' AND a.program_id = %s'
+            params.append(program_id)
+        
+        query += ' ORDER BY a.submitted_at DESC'
     
     applications = Database.execute_query(query, tuple(params))
     
